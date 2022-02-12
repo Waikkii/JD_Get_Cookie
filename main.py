@@ -1,54 +1,53 @@
-import re
-import os
-import sys
-import zipfile
-import winreg
-import requests
-import time
-import pyperclip
-#from selenium import webdriver
-#from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from seleniumwire import webdriver
-#from seleniumwire.webdriver.common.desired_capabilities import DesiredCapabilities
+from os import path, remove, popen
+from sys import argv
+from zipfile import ZipFile
+from winreg import OpenKey, QueryValueEx, HKEY_CURRENT_USER
+from requests import get
+from pyperclip import copy
+from datetime import datetime
+from fake_useragent import UserAgent
+from selenium import webdriver
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+
 chrome_options = webdriver.ChromeOptions()
 chrome_options.add_experimental_option('detach', True)
 chrome_options.add_experimental_option('w3c', False)
 chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-# chrome_options.add_argument('--headless')
-# chrome_options.add_argument('--disable-gpu')
-# chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument("--auto-open-devtools-for-tabs")
+chrome_options.add_argument('--incognito')#无痕隐身模式
+chrome_options.add_argument("disable-cache")#禁用缓存
+chrome_options.add_argument('disable-infobars')
+chrome_options.add_argument('log-level=3')#INFO = 0 WARNING = 1 LOG_ERROR = 2 LOG_FATAL = 3 default is 0
 
-# d = DesiredCapabilities.CHROME
-# d['loggingPrefs'] = { 'performance':'ALL' }
+url='https://registry.npmmirror.com/-/binary/chromedriver/' # chromedriver download link
 
-url='http://npm.taobao.org/mirrors/chromedriver/' # chromedriver download link
+def exitWait():
+    getYourCode = input("请按回车键自动退出。")
+    exit(0)
 
 def get_path():
-    return os.path.dirname(os.path.realpath(sys.argv[0]))
-    #return os.path.dirname(os.path.realpath(__file__))
-
+    return path.dirname(path.realpath(argv[0]))
+    #return path.dirname(path.realpath(__file__))
 
 def get_Chrome_version():
-    key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Google\Chrome\BLBeacon')
-    version, types = winreg.QueryValueEx(key, 'version')
+    key = OpenKey(HKEY_CURRENT_USER, r'Software\Google\Chrome\BLBeacon')
+    version, types = QueryValueEx(key, 'version')
     return version
 
 def get_server_chrome_versions():
     '''return all versions list'''
     versionList=[]
-    url="http://npm.taobao.org/mirrors/chromedriver/"
-    rep = requests.get(url).text
-    result = re.compile(r'\d.*?/</a>.*?Z').findall(rep)
-    for i in result:                               
-        version = re.compile(r'.*?/').findall(i)[0]         # 提取版本号
-        versionList.append(version[:-1])                  # 将所有版本存入列表
+    version_url="https://registry.npmmirror.com/-/binary/chromedriver/"
+    rep = get(version_url).json()
+    for i in rep:                               
+        version = i["name"].replace("/","")         # 提取版本号
+        versionList.append(version)            # 将所有版本存入列表
     return versionList
-
 
 def download_driver(download_url):
     '''下载文件'''
-    file = requests.get(download_url)
+    file = get(download_url)
     with open("chromedriver.zip", 'wb') as zip_file:        # 保存文件到脚本所在目录
         zip_file.write(file.content)
         print('下载成功')
@@ -64,13 +63,12 @@ def download_lase_driver(download_url, chromeVersion, chrome_main_version):
                 download_url=f"{url}{version}/chromedriver_win32.zip"
                 break
         if download_url=="":
-            print("暂无法找到与chrome兼容的chromedriver版本，请在http://npm.taobao.org/mirrors/chromedriver/ 核实。")
-
+            print("暂无法找到与chrome兼容的chromedriver版本，请前往http://npm.taobao.org/mirrors/chromedriver/ 核实。")
     download_driver(download_url=download_url)
     path = get_path()
     print('当前路径为：', path)
     unzip_driver(path)
-    os.remove("chromedriver.zip")
+    remove("chromedriver.zip")
     dri_version = get_version()
     if dri_version == 0:
         return 0
@@ -79,17 +77,16 @@ def download_lase_driver(download_url, chromeVersion, chrome_main_version):
 
 def get_version():
     '''查询系统内的Chromedriver版本'''
-    outstd2 = os.popen('chromedriver --version').read()
+    outstd2 = popen('chromedriver --version').read()
     try:
         out = outstd2.split(' ')[1]
     except:
         return 0
     return out
 
-
 def unzip_driver(path):
     '''解压Chromedriver压缩包到指定目录'''
-    f = zipfile.ZipFile("chromedriver.zip",'r')
+    f = ZipFile("chromedriver.zip",'r')
     for file in f.namelist():
         f.extract(file, path)
 
@@ -106,7 +103,7 @@ def check_update_chromedriver():
         driverVersion=get_version()
         driver_main_version=int(driverVersion.split(".")[0]) # chromedriver主版本号
     except:
-        print('未安装Chromedriver，正在为您自动下载>>>')
+        print(f"未安装Chromedriver，正在为您自动下载({chromeVersion})>>>")
         download_url=""
         if download_lase_driver(download_url, chromeVersion, chrome_main_version) == 0:
             return 0
@@ -115,11 +112,11 @@ def check_update_chromedriver():
     
     download_url=""
     if driver_main_version!=chrome_main_version:
-        print("chromedriver版本与chrome浏览器不兼容，更新中>>>")
+        print(f"chromedriver版本与chrome浏览器不兼容，更新中({chromeVersion})>>>",)
         if download_lase_driver(download_url, chromeVersion, chrome_main_version) == 0:
             return 0
     else:
-       print("chromedriver版本已与chrome浏览器相兼容，无需更新chromedriver版本！") 
+       print(f"chromedriver版本已与chrome浏览器相兼容({chromeVersion})，无需更新chromedriver版本！") 
 
 def find_and_paste(cookie):
     # 文件路径
@@ -129,49 +126,51 @@ def find_and_paste(cookie):
         if 'pt_key' in item:
             pt_key = item
     jd_cookie = pt_pin+';'+pt_key+';'
-    pyperclip.copy(jd_cookie)
+    copy(jd_cookie)
     return jd_cookie
 
 def main():
-    print('请在弹出的网页中登录账号。')
-    #driver = webdriver.Chrome(executable_path='chromedriver.exe', desired_capabilities=d, options=chrome_options)
+    print('请在弹出的网页中登录账号。推荐使用账户密码形式登录。')
+
+    ua = UserAgent().safari
+    print('随机UA为：', ua)
+
     driver = webdriver.Chrome(executable_path=get_path()+'\chromedriver.exe', options=chrome_options)
-    driver.get("https://plogin.m.jd.com/login/login")
-    input('登陆后按Enter键继续...')
 
-    driver.get("https://home.m.jd.com/myJd/newhome.action")
-    time.sleep(2)
-    # urls = []
-    # #获取静态资源有效链接
-    # for log in driver.get_log('performance'):
-    #     if 'message' not in log:
-    #         continue
-    #     log_entry = json.loads(log['message'])
-    #     try:
-    #         #该处过滤了data:开头的base64编码引用和document页面链接
-    #         #if "data:" not in log_entry['message']['params']['request']['url'] and 'Document' not in  log_entry['message']['params']['type']:
-    #         #urls.append(log_entry['message']['params']['request']['url'])
-    #         if 'https://hermes.jd.com/log.gif?' in log_entry["message"]['params']['request']['url']:
-    #             print(log_entry["message"]['params'])
-    #             output=open(r'C:\Users\Dell\Desktop\myrecord.txt','w') 
-    #             print(log_entry["message"]['params'],file=output)
-    #             output.close()
-    #     except Exception as e:
-    #         pass
-    # print(urls)
-    for request in driver.requests:
-        # if request.response and "cookies" in request.headers:
-        #     print(request.headers["cookies"])
-        if request.response:
-            if request.path == "/myJd/newhome.action":
-                cookie = request.headers["cookie"]
+    print("当前浏览器内置user-agent为：", driver.execute_script('return navigator.userAgent'))
 
-    print('jd_cookie: ', find_and_paste(cookie))
-    print('已复制到剪切板！')
+    driver.execute_cdp_cmd("Emulation.setUserAgentOverride", {
+        "userAgent": ua
+    })
+
+    print("更改后浏览器user-agent为：", driver.execute_script('return navigator.userAgent'))
+
+    driver.get('https://bean.m.jd.com/bean/signIndex.action')
+
+    try:
+        if WebDriverWait(driver, 600, poll_frequency=0.2, ignored_exceptions=None).until(EC.title_is(u"签到日历")):
+            '''判断title,返回布尔值'''
+            nowtime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            print('{} : 登录成功'.format(nowtime))
+
+    except:
+        print('超时退出')
+        exitWait()
+        exit(2)
+
+    jd_cookies = driver.get_cookies()
+
+    for cookie in jd_cookies:
+        if cookie['name'] == "pt_key":
+            pt_key ='{}={};'.format(cookie['name'], cookie['value'])
+        elif cookie['name'] == "pt_pin":
+            pt_pin = '{}={};'.format(cookie['name'], cookie['value'])
+
+    result = pt_key + pt_pin
+    copy(result)
+    print('jd_cookie: ', result)
     input('按Enter键退出...')
-
     driver.close()
-
 
 if __name__ == '__main__':
     check_update_chromedriver()
