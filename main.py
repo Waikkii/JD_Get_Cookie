@@ -11,14 +11,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
 chrome_options = webdriver.ChromeOptions()
-chrome_options.add_experimental_option('detach', True)
-chrome_options.add_experimental_option('w3c', False)
-chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-chrome_options.add_argument("--auto-open-devtools-for-tabs")
-chrome_options.add_argument('--incognito')#无痕隐身模式
-chrome_options.add_argument("disable-cache")#禁用缓存
-chrome_options.add_argument('disable-infobars')
-chrome_options.add_argument('log-level=3')#INFO = 0 WARNING = 1 LOG_ERROR = 2 LOG_FATAL = 3 default is 0
+chrome_options.add_argument('log-level=3')
+
+#去除webdriver特征
+chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+chrome_options.add_experimental_option('useAutomationExtension', False)
+chrome_options.add_argument("--disable-blink-features")
+chrome_options.add_argument("--disable-blink-features=AutomationControlled")
 
 url='https://registry.npmmirror.com/-/binary/chromedriver/' # chromedriver download link
 
@@ -136,6 +136,14 @@ def main():
     print('随机UA为：', ua)
 
     driver = webdriver.Chrome(executable_path=get_path()+'\chromedriver.exe', options=chrome_options)
+
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+        "source": """
+            Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+            })
+        """
+    })
 
     print("当前浏览器内置user-agent为：", driver.execute_script('return navigator.userAgent'))
 
